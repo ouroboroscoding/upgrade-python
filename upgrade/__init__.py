@@ -10,7 +10,7 @@ __version__		= "1.0.0"
 __email__		= "chris@ouroboroscoding.com"
 __created__		= "2023-07-12"
 
-__all__ = ['set_latest', 'upgrade']
+__all__ = ['set_latest', 'uninstall', 'upgrade']
 
 # Ouroboros imports
 from strings import from_file, to_file, version_compare
@@ -19,7 +19,7 @@ from tools import lfindi
 # Python imports
 from importlib import import_module
 from functools import cmp_to_key
-from os import path, scandir
+from os import path, remove as osremove, scandir
 import re
 
 # Constants
@@ -111,17 +111,38 @@ def set_latest(data_path: str, module_path: str) -> bool:
 		bool
 	"""
 
-	# Using the module path, get the name of the file
-	sFile = '%s/%s.ver' % (
-		data_path,
-		path.basename(module_path)
-	)
-
-	# Get the versions available, and store the "to" of the last one
+	# Using the module path, get the name of the file, get the versions
+	#	available, and store the "to" of the last one
 	return to_file(
-		sFile,
+		'%s/%s.ver' % ( data_path, path.basename(module_path) ),
 		_get_versions(module_path)[-1]['to']
 	)
+
+def uninstall(data_path: str, module_path: str) -> bool:
+	"""Uninstall
+
+	Removes the version file
+
+	Arguments:
+		data_path (str): The path where the version file can be stored
+		module_path (str): The path to the module
+
+	Returns:
+		bool
+	"""
+
+	# Using the module path, get the name of the file, then delete it and return
+	#	True
+	try:
+		osremove('%s/%s.ver' % (
+			data_path,
+			path.basename(module_path)
+		))
+		return True
+
+	# If the file is not found, return False
+	except FileNotFoundError:
+		return False
 
 def upgrade(data_path: str, module_path: str) -> int:
 	"""Upgrade
