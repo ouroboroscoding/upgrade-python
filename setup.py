@@ -5,7 +5,7 @@ with open('README.md', 'r') as oF:
 
 setup(
 	name='upgrade-oc',
-	version='1.0.2',
+	version='1.0.3',
 	description='Generic functions for handling upgrading services',
 	long_description=long_description,
 	long_description_content_type='text/markdown',
@@ -20,8 +20,8 @@ setup(
 	packages=['upgrade'],
 	python_requires='>=3.10',
 	install_requires=[
-		"strings-oc>=1.0.3,<1.1",
-		"tools-oc>=1.2.2,<1.3"
+		"strings-oc>=1.0.7,<1.1",
+		"tools-oc>=1.2.4,<1.3"
 	],
 	zip_safe=True
 )
