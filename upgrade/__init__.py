@@ -43,7 +43,7 @@ def _get_versions(module_path) -> list[dict]:
 	lVersions = []
 	try:
 		sPath = '%s/upgrades' % module_path
-		for o in scandir():
+		for o in scandir(sPath):
 			if o.is_file() and UPGRADE_SCRIPT.match(o.name):
 				l = [s.replace('_', '.') for s in o.name[1:-3].split('_v')]
 				lVersions.append({
