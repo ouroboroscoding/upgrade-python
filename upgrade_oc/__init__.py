@@ -10,7 +10,11 @@ __version__		= "1.0.0"
 __email__		= "chris@ouroboroscoding.com"
 __created__		= "2023-07-12"
 
-__all__ = ['set_latest', 'uninstall', 'upgrade']
+# Limit imports
+__all__ = [
+	'set_latest', 'uninstall', 'upgrade', 'UpgradeMessages',
+	'UpgradeScriptRegex'
+]
 
 # Ouroboros imports
 from strings import from_file, to_file, version_compare
@@ -20,13 +24,19 @@ from tools import lfindi
 from importlib import import_module
 from functools import cmp_to_key
 from os import path, remove as osremove, scandir
-import re
 from sys import stderr
+from typing import List
 
-# Constants
-UPGRADE_SCRIPT = re.compile('^v\d+_\d+_\d+_v\d+_\d+_\d+\.py$')
+# Import types
+from upgrade_oc.types import UpgradeMessages, UpgradeMode, UpgradeScriptRegex
 
-def _get_versions(module_path) -> list[dict]:
+# Default messages
+_default_messages = UpgradeMessages()
+
+def _get_versions(
+	module_path: str,
+	messages: UpgradeMessages
+) -> List[dict]:
 	"""Get Versions
 
 	Returns a list of the upgrade versions currently available in the given \
@@ -34,6 +44,8 @@ def _get_versions(module_path) -> list[dict]:
 
 	Arguments:
 		module_path (str): The path to the module
+		messages (UpgradeMessages): The messages to display to the user, \
+			specifically `no_path`
 
 	Returns:
 		list[dict]
@@ -44,7 +56,7 @@ def _get_versions(module_path) -> list[dict]:
 	try:
 		sPath = '%s/upgrades' % module_path
 		for o in scandir(sPath):
-			if o.is_file() and UPGRADE_SCRIPT.match(o.name):
+			if o.is_file() and UpgradeScriptRegex.match(o.name):
 				l = [s.replace('_', '.') for s in o.name[1:-3].split('_v')]
 				lVersions.append({
 					'module': o.name[:-3],
@@ -52,16 +64,21 @@ def _get_versions(module_path) -> list[dict]:
 					'to': l[1]
 				})
 	except FileNotFoundError as e:
-		print('%s not found, no versions available' % e.filename, file = stderr)
+		print(messages.no_path % e.filename, file = stderr)
 		return []
 
 	# Sort them by 'at'
-	lVersions.sort(key=cmp_to_key(lambda a, b: version_compare(a['at'], b['at'])))
+	lVersions.sort(
+		key=cmp_to_key(lambda a, b: version_compare(a['at'], b['at']))
+	)
 
 	# Return the versions found
 	return lVersions
 
-def _version_prompt(versions: list[dict]):
+def _version_prompt(
+	versions: List[dict],
+	messages: UpgradeMessages
+):
 	"""Version Prompt
 
 	Keeps asking the user for a version from the list until a satisfactory
@@ -69,7 +86,8 @@ def _version_prompt(versions: list[dict]):
 
 	Arguments:
 		versions (dict[]): The list of upgrades available
-		prompt (str): The message to deliver to the user
+		messages (UpgradeMessages): The messages to display to the user, \
+			specifically `select` and `select_invalid`
 
 	Returns:
 		int | None
@@ -86,7 +104,7 @@ def _version_prompt(versions: list[dict]):
 		for i in range(len(versions)):
 			print('[%d]: %s' % (i, versions[i]['at']))
 		print('[q]: quit')
-		sIndex = input('Please select the version to start from: ')
+		sIndex = input(messages.select)
 
 		# If it's 'q'
 		if sIndex == 'q':
@@ -96,22 +114,23 @@ def _version_prompt(versions: list[dict]):
 		try:
 			iIndex = int(sIndex)
 		except ValueError:
-			print('Invalid version, please select a number from 0 to %d, or "q" to quit' % (len(versions) - 1))
+			print(messages.select_invalid % (len(versions) - 1))
 			continue
 
 		# If it's to long
 		if iIndex > len(versions):
-			print('Invalid version, please select a number from 0 to %d, or "q" to quit' % (len(versions) - 1))
+			print(messages.select_invalid % (len(versions) - 1))
 			continue
 
 		# Return the index from the list of versions
 		return iIndex
 
 def set_latest(
-		data_path: str,
-		module_path: str,
-		initial: str = '1.0.0'
-	) -> bool:
+	data_path: str,
+	module_path: str,
+	initial: str = '1.0.0',
+	messages: UpgradeMessages = _default_messages
+) -> bool:
 	"""Set Latest
 
 	Sets the current version to the last upgradable version. This is useful if \
@@ -124,13 +143,15 @@ def set_latest(
 		module_path (str): The path to the module
 		initial (str): Optional, the initial version to set the module to if \
 			no upgrade scripts are found
+		messages (UpgradeMessages): The messages to display to the user, \
+			specifically `no_path`
 
 	Returns:
 		bool
 	"""
 
 	# Get the current versions
-	lVersions = _get_versions(module_path)
+	lVersions = _get_versions(module_path, messages)
 
 	# If there's none, use the initial argument
 	if not lVersions:
@@ -147,7 +168,11 @@ def set_latest(
 		sVersion
 	)
 
-def uninstall(data_path: str, module_path: str) -> bool:
+def uninstall(
+	data_path: str,
+	module_path: str,
+	messages: UpgradeMessages = _default_messages
+) -> bool:
 	"""Uninstall
 
 	Removes the version file
@@ -155,6 +180,8 @@ def uninstall(data_path: str, module_path: str) -> bool:
 	Arguments:
 		data_path (str): The path where the version file can be stored
 		module_path (str): The path to the module
+		messages (UpgradeMessages): The messages to display to the user, \
+			specifically `no_file`
 
 	Returns:
 		bool
@@ -171,17 +198,25 @@ def uninstall(data_path: str, module_path: str) -> bool:
 
 	# If the file is not found, return False
 	except FileNotFoundError as e:
-		print('%s not found' % e.filename, file = stderr)
+		print(messages.no_file % e.filename, file = stderr)
 		return False
 
-def upgrade(data_path: str, module_path: str) -> int:
+def upgrade(
+	data_path: str,
+	module_path: str,
+	mode: UpgradeMode = 'module',
+	messages: UpgradeMessages = _default_messages
+) -> int:
 	"""Upgrade
 
-	Upgrades the tables and other data from one version to the next
+	Runs the upgrade scripts one at a time until the version is at the latest
 
 	Arguments:
 		data_path (str): The path where the version file can be stored
 		module_path (str): The path to the module
+		mode (UpgradeMode): The mode to run in, 'module' or 'project'
+		messages (UpgradeMessages): The messages to use in communicating to \
+			the user of success or failures
 
 	Returns:
 		int
@@ -198,21 +233,22 @@ def upgrade(data_path: str, module_path: str) -> int:
 	iVersion = -1
 
 	# Get the current versions from the upgrades directory
-	lVersions = _get_versions(module_path)
+	lVersions = _get_versions(module_path, messages)
 
 	# If we got no versions
 	if not lVersions:
-		print('No versions available, unable to upgrade')
+		print(messages.none, file = stderr)
 		return 0
 
 	# If we have no version
-	if not sVersion:
-
-		# Notify the user we have no version
-		print('No version found in the file (%s)' % sFile)
+	elif not sVersion:
+		if sVersion is None:
+			print(messages.no_file % sFile, file = stderr)
+		else:
+			print(messages.invalid % str(sVersion), file = stderr)
 
 		# Ask them to provide it
-		iVersion = _version_prompt(lVersions)
+		iVersion = _version_prompt(lVersions, messages)
 
 		# If they deciced to quit
 		if iVersion is None:
@@ -223,7 +259,7 @@ def upgrade(data_path: str, module_path: str) -> int:
 
 		# If it's the last version
 		if sVersion == lVersions[-1]['to']:
-			print('Already up to date')
+			print(messages.up_to_date)
 			return 0
 
 		# Find the index from the stored version
@@ -233,30 +269,40 @@ def upgrade(data_path: str, module_path: str) -> int:
 		if iVersion == -1:
 
 			# Notify the user we have no version
-			print('The stored version "%s" doesn\'t match any available' % sVersion)
+			print(messages.invalid % sVersion, file = stderr)
 
 			# Ask them to provide it
-			iVersion = _version_prompt(lVersions)
+			iVersion = _version_prompt(lVersions, messages)
 
 			# If they deciced to quit
 			if iVersion is None:
 				return 0
 
-	print('Current version: %s' % lVersions[iVersion]['at'])
+	# Print the current version
+	print(messages.current % lVersions[iVersion]['at'])
 
 	# Starting at the version we have selected, run through each of the
 	#	remaining to update to the latest
 	while iVersion < len(lVersions):
 
-		# Load the module
-		oVer = import_module('%s.upgrades.%s' % (
-			sModule,
-			lVersions[iVersion]['module']
-		))
+		# If we're in module mode
+		if mode == 'module':
+
+			# Load the module
+			oVer = import_module('%s.upgrades.%s' % (
+				sModule,
+				lVersions[iVersion]['module']
+			))
+
+		# Else, if we're in project mode
+		elif mode == 'project':
+
+			# Load the module
+			oVer = import_module('upgrades.%s' % lVersions[iVersion]['module'])
 
 		# Run the the upgrade, if it fails
 		if not oVer.run():
-			print('Failed')
+			print(messages.failed, file = stderr)
 			return 1
 
 		# Store the new "at" version using the "to" from this one
@@ -266,7 +312,7 @@ def upgrade(data_path: str, module_path: str) -> int:
 		iVersion += 1
 
 	# Notify
-	print('Success')
+	print(messages.success)
 
 	# Return OK
 	return 0
